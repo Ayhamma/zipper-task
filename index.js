@@ -1,33 +1,41 @@
-const express = require("express");
-const zlib = require("zlib");
-const multer = require("multer");
+import express from "express";
+import cors from "cors";
+import busboy from "busboy";
+import zlib from "zlib";
 
 const app = express();
-const upload = multer();
-const login = "ayham";
+app.use(cors());
 
-app.get("/login", (req, res) => {
-  res.type("text/plain");
-  res.send(login);
+app.get("/login", (_, res) => {
+  res.type("text/plain").send("ayham");
 });
 
-app.post("/zipper", upload.any(), (req, res) => {
-  let input;
+function gzip(data) {
+  return zlib.gzipSync(data);
+}
 
-  if (req.files && req.files.length > 0) {
-    input = req.files[0].buffer;
-  } else {
-    return res.status(400).send("no file");
-  }
+app.post("/zipper", (req, res) => {
+  const bb = busboy({ headers: req.headers });
+  let buffer = Buffer.alloc(0);
 
-  zlib.gzip(input, (err, result) => {
-    if (err) return res.status(500).send("error");
-
-    res.setHeader("Content-Type", "application/gzip");
-    res.setHeader("Content-Disposition", "attachment; filename=result.gz");
-    res.send(result);
+  bb.on("file", (_, file) => {
+    file.on("data", (chunk) => {
+      buffer = Buffer.concat([buffer, chunk]);
+    });
   });
+
+  bb.on("field", (_, value) => {
+    buffer = Buffer.from(value);
+  });
+
+  bb.on("close", () => {
+    const result = gzip(buffer);
+    res.setHeader("Content-Type", "application/gzip");
+    res.end(result);
+  });
+
+  req.pipe(bb);
 });
 
-const port = process.env.PORT || 3000;
-app.listen(port);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT);
